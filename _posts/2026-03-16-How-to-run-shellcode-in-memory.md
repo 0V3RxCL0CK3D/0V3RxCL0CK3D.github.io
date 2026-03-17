@@ -23,7 +23,7 @@ msfvenom -p windows/x64/exec CMD="calc.exe" -f c
 ```
 This command generates shellcode in a C-style variable format, allowing it to be directly copied and embedded into our program. Because the output is already formatted as a byte array, there is no need to load the shellcode from an external binary file — it can be included and executed directly within the source code.
 
-```Cpp
+```cpp
 unsigned char buf[] = 
 "\xfc\x48\x83\xe4\xf0\xe8\xc0\x00\x00\x00\x41\x51\x41\x50"
 "\x52\x51\x56\x48\x31\xd2\x65\x48\x8b\x52\x60\x48\x8b\x52"
@@ -113,17 +113,6 @@ The fourth argument specifies the memory protection permissions, such as read, w
 Memory permissions can also be modified after allocation using the `VirtualProtect` function, which will be discussed in later blogs.
 
 Finally, if `VirtualAlloc` successfully allocates memory, it returns the base address of the allocated region. This address can then be used to place and execute the shellcode, such as running it through a thread. If the allocation fails, the function returns `NULL`.
-
-
-## Shellcode Injection
-So far we have allocated a memory for our shellcode with proper permission now we will copy our shellcode from variable **buf** to actual memory region with function `memcpy`, its a standard C library function used to copy raw data from one location to another byte-by-byte.
-
-```cpp
-void *result = memcpy(baseaddr, buf, sizeof(buf));
-if(!result){
-    cout << "Failed to copy Memory" << endl;
-}
-```
 
 
 ## Shellcode Injection
