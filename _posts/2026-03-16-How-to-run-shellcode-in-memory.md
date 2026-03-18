@@ -233,4 +233,4 @@ For compiling the program, I used **Visual Studio**, but you are free to use any
 
 In this tutorial, the focus was on understanding how memory allocation, threading, and execution work within the Windows environment, rather than implementing antivirus or EDR evasion techniques. In upcoming blogs, we will further explore detection mechanisms and discuss more advanced concepts related to modern AV/EDR defense Bypass.
 
-![Threat Found](/assets/images/How-to-run-shellcode-in-memory/execution.png)
+![Threat Found](/assets/images/How-to-run-shellcode-in-memory/threatfound.png)
